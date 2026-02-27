@@ -1,0 +1,140 @@
+---
+title: "A7 Kickstarter"
+author: "Kewei Zhang"
+date: 2026-02-26
+format:
+  html:
+   embed-resources: true
+---
+
+## Loading Libraries
+
+```{r}
+library(dplyr)
+library(ggplot2)
+```
+
+## Loading Data
+
+```{r}
+ks_df <- read.csv("ks-projects-201801.csv")
+glimpse(ks_df)
+```
+
+## Processing Data
+
+```{r}
+ks_df <- ks_df |>
+  mutate(
+    deadline_date = as.Date(deadline),
+    launched_date = as.Date(launched),
+    deadline_year = format(deadline_date, "%Y"),
+    launched_year = format(launched_date, "%Y")
+  )
+
+glimpse(ks_df)
+```
+
+## Initial Calculations
+
+- How many projects are in the dataset?
+
+```{r}
+total_projects <- nrow(ks_df)
+total_projects
+```
+
+
+- How many of the projects are marked as "successful"?
+
+```{r}
+successful_projects <- ks_df |>
+  filter(state == "successful") |>
+  nrow()
+successful_projects
+```
+
+- How many of the projects are marked as "failed"?
+
+```{r}
+failed_projects <- ks_df |>
+  filter(state == "failed") |>
+  nrow()
+failed_projects
+```
+
+
+- What percentage of the projects are marked as "failed"?
+
+```{r}
+failed_percent <- round(failed_projects / total_projects * 100, 2)
+failed_percent
+```
+
+There is a total of `r total_projects` projects in the dataset, and `r successful_projects` projects in the dataset are marked as "successful". There are `r failed_projects` projects marked as "failed", and the percentage of the projects marked as "failed" is `r failed_percent` percent.
+
+## Biggest Non-Success
+
+```{r}
+biggest_non_success <- ks_df |>
+  filter(state != "successful") |>
+  filter(usd_pledged_real == max(usd_pledged_real))
+
+glimpse(biggest_non_success)
+```
+The biggest non-success is the Skarp Laser Razor, a crowdfunding project that claimed to use laser technology to shave. It was suspended for failing to provide a functional prototype, and the product was never successfully brought to market. 
+
+## Project State
+
+```{r}
+state_summary <- ks_df |>
+  group_by(state) |>
+  summarize(count = n())
+
+state_summary
+```
+
+```{r}
+ggplot(state_summary, aes(x=state, y=count, fill=state)) +
+  geom_col() +
+  labs(
+    title = "Number of Kickstarter Projects by State",
+    x = "State",
+    y = "Number of Projects"
+  )
+```
+
+From the bar chart, I observed that the majority of projects have failed. The successful projects are the second highest, and there is a substantial number of projects that are cancelled. Very few projects are live, suspended, or undefined. 
+
+## Yearly Summary
+
+```{r}
+yearly_summary <- ks_df |>
+  group_by(launched_year) |>
+  summarize(
+    count = n(),
+    num_success = sum(state == "successful"),
+    percent_success = round(num_success / count * 100, 2),
+    avg_pledged = mean(usd_pledged_real)
+  )
+
+print(yearly_summary)
+```
+I grouped the data by lauched_year because I wanted to look at project performance based on when campaigns were actually started and not when they ended. I think that the lauch year better reflects the conditions at the time the project entered the Kickstarter platform. I calculated the percent success rate using success vs. all other states. This is because the resulting value gives a clear success rate relative to all states. This provides a better overview than success versus failure alone. For the pledge summary, I used the average pledged amount because the mean gives a general view of how much fund the projects raised. It also allows for comparison across the years. 
+
+```{r}
+ggplot(yearly_summary, aes(x=launched_year, y=percent_success)) +
+  geom_col() +
+  labs(
+    title = "Kickstarter Success Rate by Year",
+    x = "Year (Launched)",
+    y = "Success Rate (%)"
+  )
+```
+
+The highest success rate is around 2011at about 46 percent. From 2009 to 2013, success rates were both high and stable ar around 43 to 46 percent. However, there was a big decline in 2014 and 2015 where success rate dropped to about 31 and 27 percent. After hitting the lowest in 2015, succes rate gradually grow in 2016 and 2017 to the mid 30 percent range. 
+
+## Unusual Data Values
+
+One unusual value in the dataset is the year 1970 which has 7 projects. This is clearly unusual because according to the Kickstarter official website, Kickstarter launched on April 28, 2009. Therefore, it is impossible to have data for real projects in 1970. One possible explanation is that some projects had missing or invalid launch dates, and the system automatically converted them to 1970-01-01 01:00:00. One followup question I have for the dataset creators is how were missing date values handled during data preprocessing? Were these 1970 entries intentionally left in the dataset?
+
