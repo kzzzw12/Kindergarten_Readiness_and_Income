@@ -1,0 +1,240 @@
+---
+title: "School Readiness and Household Income by County"
+author: "BG7: Kewei Zhang, Zhiyi Wang, Xuebin Ding"
+format: 
+  dashboard:
+    theme: cosmo
+    embed-resources: true
+editor: visual
+---
+
+```{r}
+library(dplyr)
+library(readxl)
+library(ggplot2)
+library(readr)
+library(tidyr)
+library(maps)
+library(plotly)
+```
+
+# Overview
+
+## Row {height="22%"}
+
+### Topical Overview
+
+**Question 1: Is there a relationship between median household income and kindergarten readiness rates across counties?**
+
+**Question 2: How does kindergarten readiness vary geographically across Washington counties?**
+
+**Question 3: How many kindergarten students are classified as ready versus not ready in each county?**
+
+**Topical Overview:** Early childhood education plays an important role in children’s long-term development. Research presents that early education programs can promote children’s academic performance and overall life opportunities. According to the Brooking institution, early investment in preschool education helps the development of identity in society, emotion, and behavior (hyperlink: https://www.brookings.edu/articles/does-head-start-work-the-debate-over-the-head-start-impact-study-explained/). The original data sources we used are from https://catalog.data.gov/dataset/report-card-wakids-2021-22-school-year, and https://ofm.wa.gov/data-research/economy/median-household-income-estimates. Our analysis is important because economic conditions may influence children’s education development. By comparing county-level income with kindergarten readiness, we can find out whether there is a relationship between income and early learning. Understanding the relationship may help educators and find better ways to improve the educational environment. There are several ethical considerations and limitations when using this dataset. The final combined dataset contains bias due to missing values in WAKID dataset. For example, several observations are missing (NA), which may influence our conclusion. However, the dataset is still large enough to understand the trends and contribute to a meaningful analysis. In terms of human rights and ethics, the dataset protects privacy because it only has county-level information rather than personal data about individuals. In addition, the dataset is provided by government agencies, which supports the transparency and reliability of data.
+
+## Row {height="45%"}
+
+<center>![](image.png){width="60%"}</center>
+
+## Row {height="23%"}
+
+### Dataset 1: Wakids Report
+
+**Data Context for WaKIDS:** Dataset 1: https://catalog.data.gov/dataset/report-card-wakids-2021-22-school-year. The WAKIDS (Washington Kindergarten Inventory of Developing Skills) Report Card WAKIDS 2021-22 School Year is published by the State of Washington through the Washington Open Data Program. The dataset is created by Office of Superintendent of Public Instruction (OSPI). The WAKIDS dataset represents kindergarten readiness levels for students across Washington State during the 2021–22 school year. The original dataset contains approximately 832,683 observations and multiple variables related to readiness measures. WAKIDS uses observational data from teachers across six dimensions, including social-emotional, physical, language, cognitive, literacy, and math. The dataset includes different organization level measures of the percentage of students who demonstrate readiness in six dimensions. These readiness indicators present early childhood development and a platform to understand the performance of students. However, there are some missing values in this dataset that is documented as NA. These values would have to be removed.
+
+### Dataset 2: Median Household Income Estimates Report
+
+**Data Context for Median Household Income:** Dataset 2: https://ofm.wa.gov/data-research/economy/median-household-income-estimates. This dataset ie published and collected by the Washington State Office of Financial Management. Because it is created by an official state agency with census-based data, it is considered reliable and authentic. The Median Household Income dataset represents estimated median household income at the county level in Washington State. The dataset records actual income and income estimates (for 2023 and 2024) for counties in Washington State across multiple years. Median household income includes all income from household members, providing various insight for family economy. It combines three income thresholds to measure the median household income estimates. The dataset provides actual median household income from 1989 to 2022, and median household income projections for 2023 and 2024. One advantage of the dataset is that it provides reliable county-level income estimates in Washington State, allowing people to observe the economic conditions between different areas.
+
+## Row {height="10%"}
+
+### Group Information
+
+**Group Information:** Our group focuses on the educational progress of preschoolers within the state of Washington. Our lab section time is every Thursday morning at 8.30 a.m. Our group members are Kewei Zhang (Foster School of Business, University of Washington; kzhang28\@uw.edu, interested in preschool education); Ding Xuebing(Informatic intended, University of Washinton; xding9\@uw.edu, interested in cybersecurity); and Zhiyi Wang ( Foster School of Business, University of Washington; zw050304\@uw.edu, interested in social security).
+
+# Q1 Income and Readiness
+
+## Row {height="65%"}
+
+### Question 1
+
+**Question 1: Is there a relationship between median household income and kindergarten readiness rates across counties?**
+
+```{r}
+wakids <- read_csv("Report_Card_WaKids_2021-22_School_Year.csv")
+income <- read_excel("median_household_income_estimates.xlsx", skip = 3)
+
+wakids_clean <- wakids |>
+  filter(
+    OrganizationLevel == "District",
+    StudentGroup == "All Students",
+    Measure == "NumberofDomainsReadyforKindergarten",
+    MeasureValue == "6"
+  ) |>
+  select (County, DistrictName, Percent, Numerator, Denominator) |>
+  mutate (Percent = as.numeric(Percent)) |>
+  filter (!is.na(County))
+
+income_clean <- income |>
+  select(County = 1, median_income_2021 = `2021`) |>
+  filter(
+    !is.na(County), 
+    County != "Washington"
+  ) |>
+  mutate(median_income_2021 = as.numeric(median_income_2021)) |>
+  filter(!is.na (median_income_2021))
+
+joined_data <- wakids_clean |> left_join(income_clean, by= "County")
+
+summarized_data <- joined_data |> group_by(County) |>
+  summarise (
+    avg_ready = mean(Percent, na.rm = TRUE),
+    total_ready = sum(Numerator, na.rm = TRUE),
+    total_students = sum(Denominator, na.rm = TRUE),
+    num_districts = n(),
+    median_income_2021 = first(median_income_2021)
+  )
+summarized_data <- summarized_data |>
+  mutate(school_readiness_rate = total_ready / total_students)
+
+```
+
+```{r}
+cor_value <- cor(
+  summarized_data$median_income_2021,
+  summarized_data$school_readiness_rate,
+  use = "complete.obs"
+)
+
+visualization_1 <- ggplot(summarized_data, aes(
+  x = median_income_2021,
+  y = school_readiness_rate
+)) +
+  geom_point(aes(color=school_readiness_rate, text = County)) +
+  geom_smooth(method="lm", se=TRUE) +
+  scale_x_continuous(labels = function(x) paste0("$", x/1000, "K")) +
+  scale_y_continuous(labels = function(y) paste0(y * 100, "%")) +
+  labs(
+    x = "Median Household Income (2021, in thousands)",
+    y = "School Readiness Rate",
+    title = paste0("School Readiness Rate by County (Pearson r =", round(cor_value, 3), ", 2021)"),
+    color = "School Readiness Rate"
+  )
+ggplotly(visualization_1, tooltip = "text")
+```
+
+## Row {Height = 35%}
+
+From the scatter plot, it seems that there is a weak negative relationship between median household income levels and kindergarten readiness rates across Washington counties. Although median income levels vary across different counties, their corresponding readiness rates are relatively clustered with each other. Some counties with relatively high median household income do not have correspondingly high readiness rates, while other counties with relatively low income levels have relatively better or comparable rates.
+
+# Q2 Geographic View
+
+## Row {height="65%"}
+
+### Question 2
+
+**Question 2: How does kindergarten readiness vary geographically across Washington counties?**
+
+```{r map}
+wa_map <- map_data("county", "washington")
+map_joined <- wa_map |>
+  left_join(
+    summarized_data |>
+      mutate(subregion = tolower(County)),
+    by = "subregion"
+  )
+
+county_centers = map_joined |>
+  group_by(subregion) |>
+  summarize(long = mean(long, na.rm = TRUE), lat = mean(lat, na.rm = TRUE))
+
+visualization_2 <- ggplot(map_joined, aes(
+  x = long,
+  y = lat, 
+  group = group,
+  fill = school_readiness_rate,
+  text = paste0(
+    "County: ", subregion, "\n", 
+    "Readiness Rate: ", round(school_readiness_rate*100, 1), "%"
+  )
+)) +
+  geom_polygon(color = "white", linewidth = 0.2) +
+  #geom_smooth(method="lm", se=TRUE) +
+  #geom_text(data = county_centers, aes(x = long, y = lat, label = subregion), color="red", inherit.aes = FALSE, size = 1.5) +
+  labs(title = "School Readiness by County", x="Longtitude", y="Latitude", fill="School Readiness Rate")
+
+ggplotly(visualization_2, tooltip = "text")
+```
+
+## Row {Height = 35%}
+
+As indicated in the geographic map, the rates of kindergarten readiness vary from county to county in the state of Washington. However, the variation does not follow a simple regional pattern. Some of the counties have a higher rate of readiness, while others have a lower rate of readiness, so there is not a particular area of concentration. The urban counties such as King, Pierce, and Snohomish have readiness rates similar to the other counties.
+
+# Q3 Readiness Number by County
+
+## Row {height="65%"}
+
+### Question 3 The number of ready and not ready by county
+
+**Question 3: How many kindergarten students are classified as ready versus not ready in each county?**
+
+```{r}
+q3_data <- summarized_data |>
+  mutate(total_not_ready = total_students - total_ready) |>
+  select(County, total_ready, total_not_ready) |>
+  pivot_longer(
+    cols = c(total_ready, total_not_ready),
+    names_to = "status",
+    values_to = "count"
+  ) |>
+  mutate(
+    status = case_when(
+      status == "total_ready" ~ "Ready",
+      status == "total_not_ready" ~ "Not Ready"
+    ),
+    County = reorder(County, count, sum)
+  )
+```
+
+```{r}
+ggplot(q3_data, aes(x=County, y=count, fill = status)) +
+  geom_col() + 
+  coord_flip() +
+  scale_fill_manual(
+    values = c(
+      "Ready" = "green",
+      "Not Ready" = "red"
+    ) 
+  ) +
+  labs(
+    title = "Number of Kindergarten Students by Readiness Status and County",
+    x = "County",
+    y = "Number of Students",
+    fill = "Status"
+  )
+```
+
+## Row
+
+The bar chart showing the number of students who are ready and not ready, indicates that the counties with higher populations have a higher number of students in both categories. For example, the counties such as King, Pierce, and Snohomish have significantly higher numbers of both ready and not ready kindergarten students compared to the other counties. However, the ratio of students that are classified as ready and not ready do not vary significantly across counties
+
+## Row
+**Coding Notes:** For the novel tools, we used cor() to find the correlation between variables. The benefit of this tool is that we can see a clear relationship and whether one variable decreases or increases with the change of another variable. We also used maps to show the geographic distributions of school readiness rates, which gives a clearer view of whether geographic area affects readiness. We also made the first and second visualizations interactive because the labels of each dot/region are important for graph interpretation and readability. For the intermediate tools, we used case_when() to convert the variable values "total_ready" and "total_not_ready" into clearer labels "Ready" and "Not Ready" so they are easier to understand in the third visualization. An alternative to our approach is using ifelse() statements or renaming them. However, case_when() is a cleaner and more readable way. first() was not covered in class, but we needed this tool to keep a single median income value for each county after grouping. This is because income is the same across districts in the same county. The tools from class did not show how to select the first single value from each group when summarizing. We learned this tool by searching "dplyr first value in group" on Google and reading this website: https://dplyr.tidyverse.org/reference/nth.html.
+
+# Conclusion
+
+## Row {height="70%"}
+
+### Summary of Findings
+
+**Major Takeaways:** The first conclusion to draw from our analysis is that the relationship between household income and kindergarten readiness is not as strong as expected. In fact, there is a weak negative correlation which means that counties with higher household income tend to have slightly lower readiness rates. For example, the county with the highest income levels, King County, has a readiness rate that falls in the upper-middle range compared to the other counties. It appears that income levels do not have a significant impact on kindergarten readiness.
+
+The second takeaway to draw from our analysis is the geographic distribution of the school readiness rates for the counties of Washington. When creating a geographic visualization, the data shows that the school readiness rates vary significantly from county to county, and they are not concentrated in any specific geographic type such as city or rural. Additionally, some counties with moderate income levels, such as Columbia and Garfield, have higher school readiness rates than some high-income county. It appears that regional and other educational factors also have an impact on the rates of school readiness, aside from income levels. The map helps to show the uneven distribution of school readiness, suggesting that each region has to be approached individually.
+
+The third takeaway we have learned comes from the bar chart for number of kindergarten students by readiness status. As the bar chart shows, counties with higher population densities, such as King County and Pierce County, naturally have more students who are ready. However, these counties also have a significant number of students deemed not ready, indicating that population size may ensure a higher number of ready students but does not guarantee a higher readiness rate. This again shows that the disparities in the readiness of students for kindergarten still exist, even in the more populated or economically stronger counties.
+
+## Row {height="70%"}
+
+### Reliability and Future Exploration
+
+**Reliability and Future Exploration:** Coming to the reliability of our project, since we have used only aggregated data from a single academic year, we might be underestimating or oversimplifying the actual factors affecting the readiness of students for kindergarten. Furthermore, the measures of readiness are static, potentially failing to comprehensively reflect all aspects of child development. We plan to include other variables such as the education levels of the parents, the amount of preschool the students had before entering kindergarten, and the amount of funding received by different schools in the future. We will also be able to get a broader insight into the effect of different factors on the readiness of students for kindergarten if combined the variables mentioned above with a larger WaKIDS report card dataset that includes different academic years.
